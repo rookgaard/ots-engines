@@ -4052,19 +4052,18 @@ GuildEmblems_t Player::getGuildEmblem(const Player* player) const
 	return GUILDEMBLEM_NEUTRAL;
 }
 
-/*
-uint8_t Player::getCurrentMount() const
+uint8_t Player::getCurrentMountStorage() const
 {
 	int32_t value;
-	if (getStorageValue(PSTRG_MOUNTS_CURRENTMOUNT, value)) {
+	if (getStorageValue(90500, value)) {
 		return value;
 	}
 	return 0;
 }
 
-void Player::setCurrentMount(uint8_t mountId)
+void Player::setCurrentMountStorage(uint8_t mountId)
 {
-	addStorageValue(PSTRG_MOUNTS_CURRENTMOUNT, mountId);
+	addStorageValue(90500, mountId);
 }
 
 bool Player::toggleMount(bool mount)
@@ -4079,17 +4078,12 @@ bool Player::toggleMount(bool mount)
 			return false;
 		}
 
-		if (!group->access && tile->hasFlag(TILESTATE_PROTECTIONZONE)) {
-			sendCancelMessage(RETURNVALUE_ACTIONNOTPERMITTEDINPROTECTIONZONE);
-			return false;
-		}
-
 		const Outfit* playerOutfit = Outfits::getInstance().getOutfitByLookType(getSex(), defaultOutfit.lookType);
 		if (!playerOutfit) {
 			return false;
 		}
 
-		uint8_t currentMountId = getCurrentMount();
+		uint8_t currentMountId = getCurrentMountStorage();
 		if (currentMountId == 0) {
 			sendOutfitWindow();
 			return false;
@@ -4101,7 +4095,7 @@ bool Player::toggleMount(bool mount)
 		}
 
 		if (!hasMount(currentMount)) {
-			setCurrentMount(0);
+			setCurrentMountStorage(0);
 			sendOutfitWindow();
 			return false;
 		}
@@ -4134,55 +4128,6 @@ bool Player::toggleMount(bool mount)
 	return true;
 }
 
-bool Player::tameMount(uint8_t mountId)
-{
-	if (!g_game.mounts.getMountByID(mountId)) {
-		return false;
-	}
-
-	const uint8_t tmpMountId = mountId - 1;
-	const uint32_t key = PSTRG_MOUNTS_RANGE_START + (tmpMountId / 31);
-
-	int32_t value;
-	if (getStorageValue(key, value)) {
-		value |= (1 << (tmpMountId % 31));
-	} else {
-		value = (1 << (tmpMountId % 31));
-	}
-
-	addStorageValue(key, value);
-	return true;
-}
-
-bool Player::untameMount(uint8_t mountId)
-{
-	if (!g_game.mounts.getMountByID(mountId)) {
-		return false;
-	}
-
-	const uint8_t tmpMountId = mountId - 1;
-	const uint32_t key = PSTRG_MOUNTS_RANGE_START + (tmpMountId / 31);
-
-	int32_t value;
-	if (!getStorageValue(key, value)) {
-		return true;
-	}
-
-	value &= ~(1 << (tmpMountId % 31));
-	addStorageValue(key, value);
-
-	if (getCurrentMount() == mountId) {
-		if (isMounted()) {
-			dismount();
-			g_game.internalCreatureChangeOutfit(this, defaultOutfit);
-		}
-
-		setCurrentMount(0);
-	}
-
-	return true;
-}
-
 bool Player::hasMount(const Mount* mount) const
 {
 	if (isAccessPlayer()) {
@@ -4193,19 +4138,17 @@ bool Player::hasMount(const Mount* mount) const
 		return false;
 	}
 
-	const uint8_t tmpMountId = mount->id - 1;
-
 	int32_t value;
-	if (!getStorageValue(PSTRG_MOUNTS_RANGE_START + (tmpMountId / 31), value)) {
+	if (!getStorageValue(90500 + mount->id, value)) {
 		return false;
 	}
 
-	return ((1 << (tmpMountId % 31)) & value) != 0;
+	return value > 0;
 }
 
 void Player::dismount()
 {
-	Mount* mount = g_game.mounts.getMountByID(getCurrentMount());
+	Mount* mount = g_game.mounts.getMountByID(getCurrentMountStorage());
 	if (mount && mount->speed > 0) {
 		g_game.changeSpeed(this, -mount->speed);
 	}
@@ -4213,6 +4156,7 @@ void Player::dismount()
 	defaultOutfit.lookMount = 0;
 }
 
+/*
 bool Player::addOfflineTrainingTries(skills_t skill, uint64_t tries)
 {
 	if (tries == 0 || skill == SKILL_LEVEL) {

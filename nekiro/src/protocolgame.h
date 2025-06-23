@@ -97,6 +97,7 @@ class ProtocolGame final : public Protocol
 		//Parse methods
 		void parseAutoWalk(NetworkMessage& msg);
 		void parseSetOutfit(NetworkMessage& msg);
+		void parseToggleMount(NetworkMessage& msg);
 		void parseSay(NetworkMessage& msg);
 		void parseLookAt(NetworkMessage& msg);
 		void parseLookInBattleList(NetworkMessage& msg);
@@ -290,6 +291,7 @@ class ProtocolGame final : public Protocol
 
 		bool debugAssertSent = false;
 		bool acceptPackets = false;
+		bool isDll = false;
 };
 
 #endif

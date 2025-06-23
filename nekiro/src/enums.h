@@ -137,6 +137,7 @@ enum OperatingSystem_t : uint8_t {
 	CLIENTOS_LINUX = 1,
 	CLIENTOS_WINDOWS = 2,
 	CLIENTOS_FLASH = 3,
+	CLIENTOS_DLL = 5,
 
 	CLIENTOS_OTCLIENT_LINUX = 10,
 	CLIENTOS_OTCLIENT_WINDOWS = 11,
@@ -490,6 +491,7 @@ struct Outfit_t {
 	uint8_t lookLegs = 0;
 	uint8_t lookFeet = 0;
 	uint8_t lookAddons = 0;
+	uint16_t lookMount = 0;
 };
 
 struct LightInfo {

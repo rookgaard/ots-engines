@@ -331,6 +331,7 @@ void ProtocolGame::onRecvFirstMessage(NetworkMessage& msg)
 
 	OperatingSystem_t operatingSystem = static_cast<OperatingSystem_t>(msg.get<uint16_t>());
 	version = msg.get<uint16_t>();
+	isDll = operatingSystem == CLIENTOS_DLL;
 
 	if (!Protocol::RSA_decrypt(msg)) {
 		disconnect();
@@ -537,6 +538,7 @@ void ProtocolGame::parsePacket(NetworkMessage& msg)
 		case 0xCA: parseUpdateContainer(msg); break;
 		case 0xD2: addGameTask(&Game::playerRequestOutfit, player->getID()); break;
 		case 0xD3: parseSetOutfit(msg); break;
+		case 0xD4: parseToggleMount(msg); break;
 		case 0xDC: parseAddVip(msg); break;
 		case 0xDD: parseRemoveVip(msg); break;
 		case 0xE6: parseBugReport(msg); break;
@@ -811,7 +813,18 @@ void ProtocolGame::parseSetOutfit(NetworkMessage& msg)
 	newOutfit.lookLegs = msg.getByte();
 	newOutfit.lookFeet = msg.getByte();
 	newOutfit.lookAddons = msg.getByte();
+
+	if (isDll) {
+		newOutfit.lookMount = msg.get<uint16_t>();
+	}
+
 	addGameTask(&Game::playerChangeOutfit, player->getID(), newOutfit);
+}
+
+void ProtocolGame::parseToggleMount(NetworkMessage& msg)
+{
+	bool mount = msg.getByte() != 0;
+	addGameTask(&Game::playerToggleMount, player->getID(), mount);
 }
 
 void ProtocolGame::parseUseItem(NetworkMessage& msg)
@@ -2086,7 +2099,7 @@ void ProtocolGame::sendOutfitWindow()
 		currentOutfit = newOutfit;
 	}
 
-	/*Mount* currentMount = g_game.mounts.getMountByID(player->getCurrentMount());
+	/*Mount* currentMount = g_game.mounts.getMountByID(player->getCurrentMountStorage());
 	if (currentMount) {
 		currentOutfit.lookMount = currentMount->clientId;
 	}*/
@@ -2117,6 +2130,21 @@ void ProtocolGame::sendOutfitWindow()
 		msg.add<uint16_t>(outfit.lookType);
 		msg.addString(outfit.name);
 		msg.addByte(outfit.addons);
+	}
+
+	if (isDll) {
+		std::vector<const Mount*> mounts;
+		for (const Mount& mount : g_game.mounts.getMounts()) {
+			if (player->hasMount(&mount)) {
+				mounts.push_back(&mount);
+			}
+		}
+
+		msg.addByte(mounts.size());
+		for (const Mount* mount : mounts) {
+			msg.add<uint16_t>(mount->clientId);
+			msg.addString(mount->name);
+		}
 	}
 
 	writeToOutputBuffer(msg);
@@ -2257,6 +2285,10 @@ void ProtocolGame::AddOutfit(NetworkMessage& msg, const Outfit_t& outfit)
 		msg.addByte(outfit.lookAddons);
 	} else {
 		msg.addItemId(outfit.lookTypeEx);
+	}
+
+	if (isDll) {
+		msg.add<uint16_t>(outfit.lookMount);
 	}
 }
 

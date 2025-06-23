@@ -1,9 +1,19 @@
+local function outfitWindow(cid)
+	local player = Player(cid)
+
+	if not player then
+		return true
+	end
+
+	player:sendOutfitWindow()
+end
+
 function onLogin(player)
 	local serverName = configManager.getString(configKeys.SERVER_NAME)
 	local loginStr = "Welcome to " .. serverName .. "!"
 	if player:getLastLoginSaved() <= 0 then
 		loginStr = loginStr .. " Please choose your outfit."
-		player:sendOutfitWindow()
+		addEvent(outfitWindow, 800, player.uid)
 	else
 		if loginStr ~= "" then
 			player:sendTextMessage(MESSAGE_STATUS_DEFAULT, loginStr)
