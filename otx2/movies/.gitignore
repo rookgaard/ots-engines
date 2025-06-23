@@ -1,0 +1,5 @@
+*
+!.gitignore
+!cams.php
+!config.php.example
+!schema.sql

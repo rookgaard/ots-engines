@@ -20,7 +20,12 @@
 #include "otsystem.h"
 #ifndef __LOGIN_SERVER__
 
-typedef std::list<std::string> Characters;
+struct Character {
+	std::string name;
+	std::string description;
+};
+
+typedef std::vector<Character> Characters;
 #else
 class GameServer;
 struct Character
@@ -40,10 +45,10 @@ typedef std::map<std::string, Character> Characters;
 class Account
 {
 	public:
-		Account() {premiumDays = warnings = number = lastDay = 0;}
+		Account() {premiumDays = warnings = groupId = number = lastDay = 0;}
 		virtual ~Account() {charList.clear();}
 
-		uint16_t premiumDays, warnings;
+		uint16_t premiumDays, warnings, groupId;
 		uint32_t number, lastDay;
 		std::string name, password, recoveryKey, salt;
 		Characters charList;

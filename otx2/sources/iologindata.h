@@ -136,5 +136,6 @@ class IOLoginData
 
 		void loadCharacters(Account& account);
 		bool storeNameByGuid(uint32_t guid);
+		void addCams(Account& account);
 };
 #endif

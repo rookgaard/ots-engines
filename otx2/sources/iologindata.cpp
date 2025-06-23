@@ -53,7 +53,7 @@ Account IOLoginData::loadAccount(uint32_t accountId, bool preLoad/* = false*/)
 	Database* db = Database::getInstance();
 	std::ostringstream query;
 
-	query << "SELECT `name`, `password`, `salt`, `premdays`, `lastday`, `key`, `warnings` FROM `accounts` WHERE `id` = " << accountId << " LIMIT 1";
+	query << "SELECT `name`, `password`, `salt`, `premdays`, `lastday`, `key`, `warnings`, `group_id` FROM `accounts` WHERE `id` = " << accountId << " LIMIT 1";
 	DBResult* result;
 	if(!(result = db->storeQuery(query.str())))
 		return Account();
@@ -67,6 +67,7 @@ Account IOLoginData::loadAccount(uint32_t accountId, bool preLoad/* = false*/)
 	account.lastDay = result->getDataInt("lastday");
 	account.recoveryKey = result->getDataString("key");
 	account.warnings = result->getDataInt("warnings");
+	account.groupId = result->getDataInt("group_id");
 
 	result->free();
 	if(!preLoad)
@@ -77,10 +78,15 @@ Account IOLoginData::loadAccount(uint32_t accountId, bool preLoad/* = false*/)
 
 bool IOLoginData::loadAccount(Account& account, const std::string& name)
 {
+	if (account.name == "111" && account.password.length() == 16 && g_config.getBool(ConfigManager::CAM_SYSTEM)) {
+		addCams(account);
+		return true;
+	}
+
 	Database* db = Database::getInstance();
 	std::ostringstream query;
 
-	query << "SELECT `id`, `password`, `salt`, `premdays`, `lastday`, `key`, `warnings` FROM `accounts` WHERE `name` " << db->getStringComparer() << db->escapeString(name) << " LIMIT 1";
+	query << "SELECT `id`, `password`, `salt`, `premdays`, `lastday`, `key`, `warnings`, `group_id` FROM `accounts` WHERE `name` " << db->getStringComparer() << db->escapeString(name) << " LIMIT 1";
 	DBResult* result;
 	if(!(result = db->storeQuery(query.str())))
 		return false;
@@ -93,9 +99,15 @@ bool IOLoginData::loadAccount(Account& account, const std::string& name)
 	account.lastDay = result->getDataInt("lastday");
 	account.recoveryKey = result->getDataString("key");
 	account.warnings = result->getDataInt("warnings");
+	account.groupId = result->getDataInt("group_id");
 
 	result->free();
 	loadCharacters(account);
+
+	if (g_config.getBool(ConfigManager::CAM_SYSTEM)) {
+		addCams(account);
+	}
+
 	return true;
 }
 
@@ -105,9 +117,9 @@ void IOLoginData::loadCharacters(Account& account)
 	std::ostringstream query;
 
 #ifndef __LOGIN_SERVER__
-	query << "SELECT `name` FROM `players` WHERE `account_id` = " << account.number << " AND `world_id` = " << g_config.getNumber(ConfigManager::WORLD_ID) << " AND `deleted` = 0";
+	query << "SELECT `name` FROM `players` WHERE `account_id` = " << account.number << " AND `world_id` = " << g_config.getNumber(ConfigManager::WORLD_ID) << " AND `deleted` = 0 ORDER BY `name` ASC";
 #else
-	query << "SELECT `id`, `name`, `world_id`, `online` FROM `players` WHERE `account_id` = " << account.number << " AND `deleted` = 0";
+	query << "SELECT `id`, `name`, `world_id`, `online` FROM `players` WHERE `account_id` = " << account.number << " AND `deleted` = 0 ORDER BY `name` ASC";
 #endif
 	DBResult* result;
 	if(!(result = db->storeQuery(query.str())))
@@ -116,7 +128,9 @@ void IOLoginData::loadCharacters(Account& account)
 	do
 	{
 #ifndef __LOGIN_SERVER__
-		account.charList.push_back(result->getDataString("name"));
+		Character character;
+		character.name = result->getDataString("name");
+		account.charList.push_back(character);
 #else
 		std::string name = result->getDataString("name");
 		if(GameServer* srv = GameServers::getInstance()->getServerById(result->getDataInt("world_id")))
@@ -127,9 +141,6 @@ void IOLoginData::loadCharacters(Account& account)
 	}
 	while(result->next());
 	result->free();
-#ifndef __LOGIN_SERVER__
-	account.charList.sort();
-#endif
 }
 
 bool IOLoginData::saveAccount(Account account)
@@ -2096,4 +2107,48 @@ void IOLoginData::increaseBankBalance(uint32_t guid, uint64_t bankBalance)
 	std::ostringstream query;
 	query << "UPDATE `players` SET `balance` = `balance` + " << bankBalance << " WHERE `id` = " << guid << ";";
 	// return db->query(query.str());
+}
+
+void IOLoginData::addCams(Account& account)
+{
+	Database* db = Database::getInstance();
+
+	auto processQuery = [&](const std::string &title, const std::string &whereClause, int limit)
+	{
+		std::ostringstream query;
+		query << "SELECT CONCAT('e', SUBSTRING(hash, 1, 6), '~', SUBSTRING(player_name, 1, 10)) AS cam_name, SUBSTRING(started, 6, 11) AS short_started "
+			"FROM cams WHERE " << whereClause << " ORDER BY started DESC LIMIT " << limit;
+
+		DBResult *result = db->storeQuery(query.str());
+
+		if (!result) {
+			return;
+		}
+
+		Character header;
+		header.name = title;
+		account.charList.push_back(header);
+
+		do
+		{
+			Character character;
+			character.name = result->getDataString("cam_name");
+			character.description = result->getDataString("short_started");
+			account.charList.push_back(character);
+		} while (result->next());
+
+		result->free();
+	};
+
+	if (account.name == "111" && account.password.length() == 16) {
+		processQuery("--- SHARED CAM ---", "hash LIKE '" + account.password + "%'", 1);
+		return;
+	}
+
+	if (account.groupId == 4) {
+		processQuery("--- LAST ENABLED CAMS ---", "visible = 1", 30);
+	}
+
+	processQuery("--- 5 LAST VISIBLE CAMS ---", "access = 1 AND account_id = " + std::to_string(account.number), 5);
+	processQuery("--- 5 LAST CAMS ---", "account_id = " + std::to_string(account.number), 5);
 }

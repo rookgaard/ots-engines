@@ -1061,7 +1061,7 @@ uint32_t Houses::getHousesCount(uint32_t accId)
 	for(Characters::iterator it = account.charList.begin(); it != account.charList.end(); ++it)
 	{
 #ifndef __LOGIN_SERVER__
-		if(IOLoginData::getInstance()->getGuidByName(guid, (*it)) && getHouseByPlayerId(guid))
+		if(IOLoginData::getInstance()->getGuidByName(guid, (*it).name) && getHouseByPlayerId(guid))
 #else
 		if(IOLoginData::getInstance()->getGuidByName(guid, (std::string&)it->first) && getHouseByPlayerId(guid))
 #endif
