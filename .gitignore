@@ -2,3 +2,5 @@
 *.log
 config.lua
 theotxserver
+tfs
+build/
