@@ -89,18 +89,7 @@ class Cam
 			return;
 		}
 
-		$this->mysqlConnection = new mysqli(
-			$config['sqlHost'],
-			$config['sqlUser'],
-			$config['sqlPassword'],
-			$config['sqlDatabase']
-		);
-
-		if ($this->mysqlConnection->connect_error) {
-			throw new RuntimeException('MySQL Error: ' . $this->mysqlConnection->connect_error);
-		}
-
-		$this->mysqlConnection->set_charset('utf8mb4');
+		$this->mysqlConnection = createMysqliConnection($config);
 		$this->ensureCamsTableExists();
 
 		foreach ($cams as $cam) {
@@ -128,7 +117,7 @@ class Cam
 			$data .= chr(hexdec('63')) . chr(hexdec($hex_sum[6] . $hex_sum[7])) . chr(hexdec($hex_sum[4] . $hex_sum[5]))
 				. chr(hexdec($hex_sum[2] . $hex_sum[3])) . chr(hexdec($hex_sum[0] . $hex_sum[1]));
 			list($player_id, $timestamp) = explode('_', $cam);
-			$hash = base_convert(md5($player_id . $timestamp), 16, 36);
+			$hash = rand(0, 9) . base_convert(md5($player_id . $timestamp), 16, 36);
 			$directory = date('Ym', $timestamp / 1000);
 			$this->compress($data, $fullPath);
 
@@ -316,6 +305,24 @@ class Cam
 	}
 }
 
+function createMysqliConnection(array $config): mysqli
+{
+	$mysqli = new mysqli(
+		$config['sqlHost'],
+		$config['sqlUser'],
+		$config['sqlPassword'],
+		$config['sqlDatabase']
+	);
+
+	if ($mysqli->connect_error) {
+		throw new RuntimeException('MySQL Error: ' . $mysqli->connect_error);
+	}
+
+	$mysqli->set_charset('utf8mb4');
+
+	return $mysqli;
+}
+
 if (!is_file(__DIR__ . '/config.php')) {
 	copy(__DIR__ . '/config.php.example', __DIR__ . '/config.php');
 }
@@ -326,4 +333,142 @@ if (!isset($config) || !isset($config['sqlHost']) || !isset($config['ftpHost']))
 	throw new RuntimeException('incomplete config.php file, compare keys with config.php.example');
 }
 
-(new Cam())->execute($config);
+if (PHP_SAPI === 'cli') {
+	(new Cam())->execute($config);
+	exit;
+}
+
+$mysqli = createMysqliConnection($config);
+
+if (isset($_GET['visible'])) {
+	$hash = $mysqli->real_escape_string($_GET['visible']);
+	$mysqli->query('UPDATE cams SET visible = NOT visible WHERE hash = "' . $hash . '"');
+	exit;
+}
+
+$sql = 'SELECT player_id, player_name, duration, hash, directory, filename, started, ended, visible FROM cams ';
+
+if (isset($_GET['param'])) {
+	$param = trim($_GET['param']);
+	$safeParam = $mysqli->real_escape_string($param);
+	$timestamp = strtotime($param);
+
+	if (strlen($param) === 10 && $timestamp !== false) {
+		$sql .= 'WHERE DATE(started) = "' . $safeParam . '" OR DATE(ended) = "' . $safeParam . '"';
+	} elseif ($timestamp !== false) {
+		$from = date('Y-m-d H:i:s', $timestamp + 120);
+		$to = date('Y-m-d H:i:s', $timestamp - 120);
+		$sql .= 'WHERE started < "' . $from . '" AND ended > "' . $to . '"';
+	} elseif ($param === 'access') {
+		$sql .= 'LEFT JOIN players ON players.id = cams.player_id WHERE group_id > 1';
+	} else {
+		$sql .= 'WHERE player_name LIKE "%' . $safeParam . '%"';
+	}
+} else {
+	$sql .= 'WHERE started > "' . date('Y-m-d H:i:s', time() - 3 * 86400) . '"';
+}
+
+$sql .= ' ORDER BY started DESC';
+$results = $mysqli->query($sql);
+$entries = [];
+
+if ($results instanceof mysqli_result) {
+	while ($row = $results->fetch_assoc()) {
+		$entries[] = $row;
+	}
+}
+?>
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="utf-8">
+	<title>Cams</title>
+	<style>
+		table {
+			border-collapse: collapse;
+			width: 100%;
+		}
+
+		td,
+		th {
+			border: 1px solid #ccc;
+			padding: 8px;
+			text-align: left;
+		}
+
+		.toggle-visible {
+			cursor: pointer;
+			text-align: center;
+		}
+
+		.toggle-visible.active {
+			background: darkgreen;
+			color: #fff;
+		}
+	</style>
+</head>
+
+<body>
+	<h2>Cams</h2>
+	<fieldset>
+		<legend>Legend:</legend>
+		<p>Changing the visibility to <span style="background-color: darkgreen; color: #fff; padding: 0 4px;">Yes</span> makes the recording visible in the character list of an admin account.</p>
+		<p>By default, the last 5 recordings from player account are added to the character list in client.</p>
+		<p>Clicking on a name in the "Name" column shows all recordings of that character.</p>
+		<p>Clicking on a date in the "Start" column shows all recordings that started/ended on that day.</p>
+		<p>Clicking on a date in the "End" column shows all recordings that started 2 minutes before and ended 2 minutes after the given value.</p>
+		<p>You can share and watch the recording using just "111" as login and value from "Password" column as password in client, regardless of the status you set.</p>
+	</fieldset>
+	<p>Query: <?= $sql; ?></p>
+	<table>
+		<tr class="head">
+			<th>Name</th>
+			<th>Password</th>
+			<th>Duration</th>
+			<th>Started</th>
+			<th>Ended</th>
+			<th>Visible</th>
+		</tr>
+		<?php foreach ($entries as $entry): ?>
+			<tr>
+				<td>
+					<a href="?param=<?= htmlspecialchars($entry['player_name'], ENT_QUOTES); ?>">
+						<?= htmlspecialchars($entry['player_name'], ENT_QUOTES); ?>
+					</a>
+				</td>
+				<td><?= substr($entry['hash'], 0, 16); ?></td>
+				<td>
+					<?= gmdate("G\\h i\\m s\\s", floor($entry['duration'] / 1000)); ?>
+				</td>
+				<td>
+					<a href="?param=<?= substr($entry['started'], 0, 10); ?>" data-timestamp="<?= strtotime($entry['started']); ?>">
+						<?= htmlspecialchars($entry['started'], ENT_QUOTES); ?>
+					</a>
+				</td>
+				<td>
+					<a href="?param=<?= $entry['ended']; ?>" data-timestamp="<?= strtotime($entry['ended']); ?>">
+						<?= htmlspecialchars($entry['ended'], ENT_QUOTES); ?>
+					</a>
+				</td>
+				<td data-hash="<?= $entry['hash']; ?>" class="toggle-visible <?= $entry['visible'] ? 'active' : ''; ?>"><?= $entry['visible'] ? 'Yes' : 'No'; ?></td>
+			</tr>
+		<?php endforeach; ?>
+	</table>
+	<script>
+		document.querySelectorAll('.toggle-visible').forEach(function(cell) {
+			cell.addEventListener('click', function(event) {
+				var targetCell = event.currentTarget;
+				var hash = targetCell.getAttribute('data-hash');
+
+				fetch('?visible=' + encodeURIComponent(hash))
+					.then(function() {
+						targetCell.classList.toggle('active');
+						targetCell.textContent = targetCell.classList.contains('active') ? 'Yes' : 'No';
+					});
+			});
+		});
+	</script>
+</body>
+
+</html>
