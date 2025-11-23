@@ -1,0 +1,11 @@
+<?php
+
+$config = [
+	'sqlHost' => 'localhost',
+	'sqlUser' => 'sqlUser',
+	'sqlPassword' => 'sqlPassword',
+	'sqlDatabase' => 'sqlDatabase',
+	'ftpHost' => 'ftpHost',
+	'ftpUser' => 'ftpUser',
+	'ftpPassword' => 'ftpPassword',
+];
