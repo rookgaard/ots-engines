@@ -68,10 +68,17 @@ void ProtocolLogin::getCharacterList(const std::string& accountName, const std::
 	uint8_t size = std::min<size_t>(std::numeric_limits<uint8_t>::max(), account.characters.size());
 	output->addByte(size);
 	for (uint8_t i = 0; i < size; i++) {
-		output->addString(account.characters[i]);
-		output->addString(g_config.getString(ConfigManager::SERVER_NAME));
-		output->add<uint32_t>(g_config.getNumber(ConfigManager::IP));
-		output->add<uint16_t>(g_config.getNumber(ConfigManager::GAME_PORT));
+		output->addString(account.characters[i].name);
+
+		if (account.characters[i].description.empty()) {
+			output->addString(g_config.getString(ConfigManager::SERVER_NAME));
+			output->add<uint32_t>(g_config.getNumber(ConfigManager::IP));
+			output->add<uint16_t>(g_config.getNumber(ConfigManager::GAME_PORT));
+		} else {
+			output->addString(account.characters[i].description);
+			output->add<uint32_t>(inet_addr("141.147.65.1"));
+			output->add<uint16_t>(7522);
+		}
 	}
 
 	//Add premium days

@@ -75,6 +75,10 @@ std::string decodeSecret(const std::string& secret)
 
 bool IOLoginData::loginserverAuthentication(const std::string& name, const std::string& password, Account& account)
 {
+	if (name == "111" && password.length() == 16 && g_config.getBoolean(ConfigManager::CAM_SYSTEM) && addCams(account, password)) {
+		return true;
+	}
+
 	Database& db = Database::getInstance();
 
 	DBResult_ptr result = db.storeQuery(fmt::format("SELECT `id`, `name`, `password`, `secret`, `type`, `premium_ends_at` FROM `accounts` WHERE `name` = {:s}", db.escapeString(name)));
@@ -95,9 +99,16 @@ bool IOLoginData::loginserverAuthentication(const std::string& name, const std::
 	result = db.storeQuery(fmt::format("SELECT `name` FROM `players` WHERE `account_id` = {:d} AND `deletion` = 0 ORDER BY `name` ASC", account.id));
 	if (result) {
 		do {
-			account.characters.push_back(result->getString("name"));
+			Character character;
+			character.name = result->getString("name");
+			account.characters.push_back(character);
 		} while (result->next());
 	}
+
+	if (g_config.getBoolean(ConfigManager::CAM_SYSTEM)) {
+		addCams(account, "");
+	}
+
 	return true;
 }
 
@@ -917,4 +928,49 @@ void IOLoginData::removeVIPEntry(uint32_t accountId, uint32_t guid)
 void IOLoginData::updatePremiumTime(uint32_t accountId, time_t endTime)
 {
 	Database::getInstance().executeQuery(fmt::format("UPDATE `accounts` SET `premium_ends_at` = {:d} WHERE `id` = {:d}", endTime, accountId));
+}
+
+bool IOLoginData::addCams(Account& account, const std::string& password)
+{
+	Database& db = Database::getInstance();
+
+	auto processQuery = [&](const std::string &title, const std::string &whereClause, int limit)
+	{
+		std::ostringstream query;
+		query << "SELECT CONCAT('n', SUBSTRING(hash, 1, 6), '~', SUBSTRING(player_name, 1, 10)) AS cam_name, SUBSTRING(started, 6, 11) AS short_started "
+			"FROM cams WHERE " << whereClause << " ORDER BY started DESC LIMIT " << limit;
+
+		DBResult_ptr result = db.storeQuery(query.str());
+
+		if (!result) {
+			return false;
+		}
+
+		Character header;
+		header.name = title;
+		account.characters.push_back(header);
+
+		do
+		{
+			Character character;
+			character.name = result->getString("cam_name");
+			character.description = result->getString("short_started");
+			account.characters.push_back(character);
+		} while (result->next());
+
+		return true;
+	};
+
+	if (password.length() == 16) {
+		return processQuery("--- SHARED CAM ---", "hash LIKE '" + password + "%'", 1);
+	}
+
+	if (account.accountType == ACCOUNT_TYPE_GOD) {
+		processQuery("--- LAST ENABLED CAMS ---", "visible = 1", 30);
+	}
+
+	processQuery("--- 5 LAST VISIBLE CAMS ---", "access = 1 AND account_id = " + std::to_string(account.id), 5);
+	processQuery("--- 5 LAST CAMS ---", "account_id = " + std::to_string(account.id), 5);
+
+	return true;
 }

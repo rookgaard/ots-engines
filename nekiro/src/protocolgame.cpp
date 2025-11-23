@@ -234,6 +234,10 @@ void ProtocolGame::login(const std::string& name, uint32_t accountId, OperatingS
 		player->lastIP = player->getIP();
 		player->lastLoginSaved = std::max<time_t>(time(nullptr), player->lastLoginSaved + 1);
 		acceptPackets = true;
+
+		if (g_config.getBoolean(ConfigManager::CAM_SYSTEM)) {
+			Protocol::startCam(player->getGUID());
+		}
 	} else {
 		if (eventConnect != 0 || !g_config.getBoolean(ConfigManager::REPLACE_KICK_ON_LOGIN)) {
 			//Already trying to connect
@@ -245,8 +249,16 @@ void ProtocolGame::login(const std::string& name, uint32_t accountId, OperatingS
 			foundPlayer->disconnect();
 			foundPlayer->isConnecting = true;
 
+			if (g_config.getBoolean(ConfigManager::CAM_SYSTEM)) {
+				Protocol::startCam(foundPlayer->getGUID());
+			}
+
 			eventConnect = g_scheduler.addEvent(createSchedulerTask(1000, std::bind(&ProtocolGame::connect, getThis(), foundPlayer->getID(), operatingSystem)));
 		} else {
+			if (g_config.getBoolean(ConfigManager::CAM_SYSTEM)) {
+				Protocol::startCam(foundPlayer->getGUID());
+			}
+
 			connect(foundPlayer->getID(), operatingSystem);
 		}
 	}
@@ -490,6 +502,7 @@ void ProtocolGame::parsePacket(NetworkMessage& msg)
 		case 0x6B: addGameTask(&Game::playerMove, player->getID(), DIRECTION_SOUTHEAST); break;
 		case 0x6C: addGameTask(&Game::playerMove, player->getID(), DIRECTION_SOUTHWEST); break;
 		case 0x6D: addGameTask(&Game::playerMove, player->getID(), DIRECTION_NORTHWEST); break;
+		case 0x6E: break;
 		case 0x6F: addGameTaskTimed(DISPATCHER_TASK_EXPIRATION, &Game::playerTurn, player->getID(), DIRECTION_NORTH); break;
 		case 0x70: addGameTaskTimed(DISPATCHER_TASK_EXPIRATION, &Game::playerTurn, player->getID(), DIRECTION_EAST); break;
 		case 0x71: addGameTaskTimed(DISPATCHER_TASK_EXPIRATION, &Game::playerTurn, player->getID(), DIRECTION_SOUTH); break;
