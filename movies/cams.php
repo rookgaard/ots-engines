@@ -54,58 +54,34 @@ class MinimalFtp
 			return false;
 		}
 
-		if (!ftp_login($this->connection, $username, $password)) {
-			return false;
+		$success = ftp_login($this->connection, $username, $password)
+			&& ftp_pasv($this->connection, true)
+			&& $this->mkdir($directory)
+			&& ftp_put(
+				$this->connection,
+				$directory . '/' . $filename . '_' . substr($hash, 0, 16),
+				__DIR__ . '/' . $filename
+			);
+
+		if ($this->connection) {
+			ftp_close($this->connection);
 		}
 
-		if (!ftp_pasv($this->connection, true)) {
-			return false;
-		}
-
-		if (!$this->mkdir($directory)) {
-			return false;
-		}
-
-		if (!ftp_put(
-			$this->connection,
-			$directory . '/' . $filename . '_' . substr($hash, 0, 16),
-			__DIR__ . '/' . $filename
-		)) {
-			return false;
-		}
-
-		return ftp_close($this->connection);
+		return $success;
 	}
 }
 
 class Cam
 {
 	const LINE_ENDING = "<hr/>\n";
+	const MAX_CAMS_PER_RUN = 50;
+	const MIN_FILE_AGE_SECONDS = 20;
 	private $mysqlConnection;
 
 	public function execute($config)
 	{
 		$start = microtime(true);
-		$cams = [];
-		$files = scandir(__DIR__);
-		$count = 0;
-		$max = 50;
-
-		foreach ($files as $file) {
-			if (!strpos($file, '_') !== false) {
-				continue;
-			}
-
-			if (time() - filemtime(__DIR__ . '/' . $file) < 20) {
-				continue;
-			}
-
-			$cams[] = $file;
-
-			if (++$count >= $max) {
-				break;
-			}
-		}
+		$cams = $this->collectCamFiles();
 
 		echo 'cams: ' . count($cams) . self::LINE_ENDING;
 
@@ -208,6 +184,49 @@ class Cam
 
 		$this->mysqlConnection->close();
 		echo 'cams: ' . count($cams) . ', time: ' . round(microtime(true) - $start, 3) . self::LINE_ENDING;
+	}
+
+	private function collectCamFiles(): array
+	{
+		$files = scandir(__DIR__);
+		$cams = [];
+
+		foreach ($files as $file) {
+			if ($this->shouldSkipFile($file)) {
+				continue;
+			}
+
+			$cams[] = $file;
+
+			if (count($cams) >= self::MAX_CAMS_PER_RUN) {
+				break;
+			}
+		}
+
+		return $cams;
+	}
+
+	private function shouldSkipFile(string $file): bool
+	{
+		if ($file === '' || $file[0] === '.') {
+			return true;
+		}
+
+		$fullPath = __DIR__ . '/' . $file;
+
+		if (!is_file($fullPath)) {
+			return true;
+		}
+
+		if (strpos($file, '_') === false) {
+			return true;
+		}
+
+		if (time() - filemtime($fullPath) < self::MIN_FILE_AGE_SECONDS) {
+			return true;
+		}
+
+		return false;
 	}
 
 	private function compress($data, $filename)
